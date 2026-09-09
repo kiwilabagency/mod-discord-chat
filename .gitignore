@@ -1,0 +1,19 @@
+# Build artifacts / secrets
+build/
+*.obj
+*.pdb
+*.user
+*.suo
+
+# Config files with real values (never commit your bot token)
+*.conf
+!conf/*.conf.dist
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store

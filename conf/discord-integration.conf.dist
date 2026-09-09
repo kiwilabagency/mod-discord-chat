@@ -1,0 +1,869 @@
+[worldserver]
+###################################################################################################
+#                                  mod-discord-chat                                              #
+#                                                                                                 #
+#   Native Discord integration for AzerothCore (3.3.5a / WotLK).                                 #
+#                                                                                                 #
+#   This module provides a complete Discord bot (gateway, REST, slash commands,                    #
+#   webhooks), two-way Global Chat bridging, administration, event logging,                       #
+#   commands, event logging, emoji rendering and playerbot-aware population                        #
+#   reporting -- all running on a dedicated worker thread so the worldserver                       #
+#   gameplay thread is never blocked by Discord networking.                                        #
+#                                                                                                 #
+#   COPY:  rename this file to  discord-integration.conf   next to your worldserver               #
+#          executable (the module copies the .dist into configs/modules/ at build).               #
+#                                                                                                 #
+#   SECURITY: never commit a file with your real bot token. This .dist template must              #
+#          always remain free of secrets.                                                          #
+#                                                                                                 #
+###################################################################################################
+
+###################################################################################################
+# GENERAL                                                                                          #
+###################################################################################################
+#    Discord.Enable
+#        Description: Master switch for the whole module. When disabled the module loads,
+#                     logs a line, registers nothing that talks to Discord, and otherwise
+#                     stays dormant.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Enable = 1
+
+#    Discord.GameRealmId
+#        Description: Realm ID used for branding and multi-realm audit/status records.
+#                     Should match the realm configured in the worldserver config.
+#        Allowed:     Any positive integer.
+#        Default:     1
+
+Discord.GameRealmId = 1
+
+###################################################################################################
+# DISCORD BOT                                                                                      #
+###################################################################################################
+#    Discord.Bot.Token
+#        Description: The bot token from the Discord Developer Portal. This is a secret; keep it
+#                     out of version control. Bot tokens look like a long string of letters,
+#                     digits, '.' and '_'.
+#        Allowed:     A valid Discord bot token, or empty to disable the bot cleanly.
+#        Default:     ""
+#        Security:    Do NOT share this token. Anyone with it fully controls the bot.
+
+Discord.Bot.Token = ""
+
+#    Discord.Bot.ApplicationId
+#        Description: The numeric Application (Client) ID shown on the Discord Developer Portal
+#                     "General Information" page. Used to register slash commands.
+#        Allowed:     A numeric snowflake, or 0 to skip command registration.
+#        Default:     0
+
+Discord.Bot.ApplicationId = 0
+
+#    Discord.Bot.GuildId
+#        Description: The numeric Guild ID (server) the bot is a member of. Found by enabling
+#                     Developer Mode in Discord, right-clicking your server -> Copy Server ID.
+#                     Required for slash commands, emoji resolution, roles and status channel.
+#        Allowed:     A numeric snowflake.
+#        Default:     0
+
+Discord.Bot.GuildId = 0
+
+#    Discord.Bot.Intents
+#        Description: Gateway intents as a bitmask (int). The module applies its required bits
+#                     internally; setting a non-zero value here ORs in additional intents.
+#                     You must enable GUILD_MEMBERS (1 << 1) and MESSAGE_CONTENT (1 << 15)
+#                     in the Developer Portal for member and message features to work.
+#        Allowed:     Any int, normally leave at 0.
+#        Default:     0
+
+Discord.Bot.Intents = 0
+
+#    Discord.Bot.GuildMembersIntent
+#        Description: Request the privileged GUILD_MEMBERS intent (required for member join/leave
+#                     events). This is a privileged intent and MUST also be enabled on the
+#                     Discord Developer Portal, otherwise Discord rejects the connection.
+#                     Set to 0 if you cannot enable it in the portal.
+#        Allowed:     0 = do not request, 1 = request
+#        Default:     1
+
+Discord.Bot.GuildMembersIntent = 1
+
+#    Discord.Bot.MessageContentIntent
+#        Description: Request the privileged MESSAGE_CONTENT intent (required to read Discord
+#                     chat messages for the Global Chat bridge). MUST also be enabled on the
+#                     Discord Developer Portal, otherwise Discord rejects the connection.
+#                     Set to 0 if you cannot enable it in the portal (the bridge will then
+#                     not receive Discord chat content).
+#        Allowed:     0 = do not request, 1 = request
+#        Default:     1
+
+Discord.Bot.MessageContentIntent = 1
+
+#    Discord.Bot.ReconnectDelay
+#        Description: Base seconds to wait before reconnecting after a dropped gateway/HTTP
+#                     connection. Reconnects use a small random jitter.
+#        Allowed:     Seconds >= 1
+#        Default:     5
+
+Discord.Bot.ReconnectDelay = 5
+
+###################################################################################################
+# SERVER BRANDING                                                                                 #
+###################################################################################################
+#    Discord.Branding.ServerName
+#        Description: Display name of the server used in status, startup and admin embeds.
+#        Allowed:     Free text.
+#        Default:     "AzerothCore"
+
+Discord.Branding.ServerName = "AzerothCore"
+
+#    Discord.Branding.ServerDescription
+#        Description: One-line description shown in status embeds.
+#        Allowed:     Free text.
+#        Default:     ""
+
+Discord.Branding.ServerDescription = ""
+
+#    Discord.Branding.ServerIconUrl
+#        Description: HTTPS URL of an icon shown in embeds.
+#        Allowed:     A URL, or empty.
+#        Default:     ""
+
+Discord.Branding.ServerIconUrl = ""
+
+#    Discord.Branding.WebsiteUrl
+#        Description: Website shown in embeds.
+#        Allowed:     A URL, or empty.
+#        Default:     ""
+
+Discord.Branding.WebsiteUrl = ""
+
+###################################################################################################
+# GLOBAL CHAT                                                                                      #
+###################################################################################################
+#    Discord.GlobalChat.Enable
+#        Description: Enables two-way chat between Discord channels and the in-game Global Chat.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.GlobalChat.Enable = 1
+
+#    Discord.GlobalChat.DiscordTag
+#        Description: Prefix shown before Discord usernames in the in-game Global Chat.
+#                     Example value produces:  [Discord] Sphynx: Anyone doing ICC?
+#        Allowed:     Free text.
+#        Default:     "[Discord]"
+
+Discord.GlobalChat.DiscordTag = "[Discord]"
+
+#    Discord.GlobalChat.TagColor
+#        Description: Color of the [Discord] tag when it is relayed into the in-game
+#                     Global Chat. Use a 6-digit hex value (RRGGBB).
+#        Allowed:     A hex color, e.g. 5865F2 (Discord blurple).
+#        Default:     "5865F2"
+
+Discord.GlobalChat.TagColor = "5865F2"
+
+#    Discord.GlobalChat.AllowChannels
+#        Description: Comma separated list of additional Discord channel IDs that may post into
+#                     the in-game Global Chat. The main global channel(s) below are always allowed.
+#        Allowed:     Comma separated numeric snowflakes.
+#        Default:     ""
+
+Discord.GlobalChat.AllowChannels = ""
+
+#    Discord.GlobalChat.UseWebhooks
+#        Description: Post game chat to Discord using webhooks so each character appears as its
+#                     own speaker (name + avatar). When disabled, messages are sent through the
+#                     bot with a fixed username and a plain "[Name]: message" body.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.GlobalChat.UseWebhooks = 1
+
+#    Discord.GlobalChat.HideWebhookName
+#        Description: When 1, the sender name is carried inside the message content and the
+#                     webhook keeps its configured default display name. For a manually created
+#                     webhook, set that name to something short like APP. Set to 0 to show the
+#                     character name as the webhook speaker instead.
+#        Allowed:     0 = show character name, 1 = invisible name
+#        Default:     1
+
+Discord.GlobalChat.HideWebhookName = 1
+
+#    Discord.GlobalChat.IncludeBots
+#        Description: When 1, Playerbot (mod-playerbots) chat is also relayed to Discord. When 0,
+#                     bot chat is suppressed. Only applies if Playerbots are detected.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     0
+
+Discord.GlobalChat.IncludeBots = 0
+
+#    Discord.GlobalChat.Attachments
+#        Description: Whether uploaded images/files/videos/stickers in Discord are relayed into
+#                     the game. Kept off by default because WoW chat cannot render attachments.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     0
+
+Discord.GlobalChat.Attachments = 0
+
+###################################################################################################
+# GLOBAL CHAT PROVIDERS                                                                           #
+###################################################################################################
+#    Discord.GlobalChat.Provider
+#        Description: Selects the in-game Global Chat system to bridge against.
+#                     AUTO detects an installed provider; otherwise it is best to set the
+#                     provider that matches the module you actually installed so bridging is
+#                     accurate. Your provider module must still be installed separately.
+#        Allowed:     AUTO | azerothcore | world-chat | gozzim | none
+#                     - AUTO        : auto-detect by installed module/config
+#                     - azerothcore : azerothcore/mod-global-chat  (uses .chat)
+#                     - world-chat  : azerothcore/mod-world-chat    (uses /join World + .chat)
+#                     - gozzim      : Gozzim/mod-globalchat         (uses .chat / .global)
+#                     - none        : disable game->Discord relaying entirely
+#        Default:     "AUTO"
+
+Discord.GlobalChat.Provider = "AUTO"
+
+#    Discord.GlobalChat.RelayDirectGameMessages
+#        Description: Whether messages sent with the in-game .discord say command are relayed to
+#                     Discord (independent of the provider abstraction). Set 0 to only allow
+#                     relaying through an installed provider.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.GlobalChat.RelayDirectGameMessages = 1
+
+###################################################################################################
+# FACTION CHANNELS                                                                                #
+###################################################################################################
+#    Discord.GlobalChat.SplitFactions
+#        Description: When 0 one combined channel is used for both factions. When 1, Alliance and
+#                     Horde use separate Discord channels, and faction-separated Discord messages
+#                     only reach the matching in-game faction Global Chat.
+#        Allowed:     0 = combined, 1 = split
+#        Default:     0
+
+Discord.GlobalChat.SplitFactions = 0
+
+#    Discord.GlobalChat.ChannelId
+#        Description: The combined global chat channel ID (used when SplitFactions = 0).
+#        Allowed:     A numeric snowflake, or 0.
+#        Default:     0
+
+Discord.GlobalChat.ChannelId = 0
+
+#    Discord.GlobalChat.AllianceChannelId
+#        Description: The Alliance global chat channel ID (used when SplitFactions = 1).
+#        Allowed:     A numeric snowflake, or 0.
+#        Default:     0
+
+Discord.GlobalChat.AllianceChannelId = 0
+
+#    Discord.GlobalChat.HordeChannelId
+#        Description: The Horde global chat channel ID (used when SplitFactions = 1).
+#        Allowed:     A numeric snowflake, or 0.
+#        Default:     0
+
+Discord.GlobalChat.HordeChannelId = 0
+
+###################################################################################################
+# WEBHOOKS                                                                                         #
+###################################################################################################
+#    Discord.Webhook.GlobalChat
+#        Description: Webhook URL used to post game chat into the combined global channel.
+#                     Paste the full URL copied from Discord, e.g.
+#                     https://discord.com/api/webhooks/<webhook_id>/<webhook_token>
+#                     Do not put the channel ID here. ChannelId stays in Discord.GlobalChat.ChannelId.
+#                     Leave empty to let the module auto-create/use a webhook if permissions allow.
+#        Allowed:     A Discord webhook URL (https://discord.com/api/webhooks/...), or empty.
+#        Default:     ""
+
+Discord.Webhook.GlobalChat = ""
+
+#    Discord.Webhook.AllianceChat
+#        Description: Webhook URL for the Alliance faction channel (used when SplitFactions = 1).
+#        Allowed:     A Discord webhook URL, or empty.
+#        Default:     ""
+
+Discord.Webhook.AllianceChat = ""
+
+#    Discord.Webhook.HordeChat
+#        Description: Webhook URL for the Horde faction channel (used when SplitFactions = 1).
+#        Allowed:     A Discord webhook URL, or empty.
+#        Default:     ""
+
+Discord.Webhook.HordeChat = ""
+
+#    Discord.Webhook.Events
+#        Description: Webhook URL used to post event-log messages (optional; falls back to the
+#                     events channel if empty).
+#        Allowed:     A Discord webhook URL, or empty.
+#        Default:     ""
+
+Discord.Webhook.Events = ""
+
+#    Discord.Webhook.Admin
+#        Description: Webhook URL used for administrative embeds (optional).
+#        Allowed:     A Discord webhook URL, or empty.
+#        Default:     ""
+
+Discord.Webhook.Admin = ""
+
+###################################################################################################
+# EMOJIS                                                                                           #
+###################################################################################################
+#    Discord.Emojis.Enable
+#        Description: Master toggle for ALL emoji rendering. When 0, no custom emojis are resolved
+#                     or printed; class colors and other normal Discord styling are still used
+#                     where supported, and no emoji placeholders are emitted.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Emojis.Enable = 1
+
+#    Discord.Emojis.ResolveByName
+#        Description: When 1, emoji names in the configuration below are resolved to real Discord
+#                     custom emoji IDs by fetching the guild emoji list and caching it. When 0,
+#                     values are treated as raw emoji IDs (<a:name:id> is not assembled).
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Emojis.ResolveByName = 1
+
+#    Discord.Emojis.Gm
+#        Description: The emoji used as the Blizz icon badge when a Game Master with ".gm chat"
+#                     enabled talks in global chat. Like every other emoji, it is resolved by
+#                     name from the bot application's or the guild's emoji list, so owners can
+#                     upload their own image as long as it uses this name.
+#        Allowed:     An emoji name with or without surrounding colons.
+#        Default:     ":gmbadge:"
+
+Discord.Emojis.Gm = ":gmbadge:"
+
+#    Discord.Emojis.ShowFaction
+#        Description: Show the faction emoji in front of a character's Discord name.
+#        Allowed:     0 = hide, 1 = show
+#        Default:     1
+
+Discord.Emojis.ShowFaction = 1
+
+#    Discord.Emojis.ShowRace
+#        Description: Show the race emoji in front of a character's Discord name.
+#        Allowed:     0 = hide, 1 = show
+#        Default:     1
+
+Discord.Emojis.ShowRace = 1
+
+#    Discord.Emojis.ShowClass
+#        Description: Show the class emoji in front of a character's Discord name.
+#        Allowed:     0 = hide, 1 = show
+#        Default:     1
+
+Discord.Emojis.ShowClass = 1
+
+#    Discord.Emojis.Faction.Enable
+#        Description: Enable the faction emoji category. Disabling omits faction emojis.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Emojis.Faction.Enable = 1
+
+#    Discord.Emojis.Class.Enable
+#        Description: Enable the class emoji category. Disabling omits class emojis.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Emojis.Class.Enable = 1
+
+#    Discord.Emojis.Race.Enable
+#        Description: Enable the race emoji category. Disabling omits race emojis.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Emojis.Race.Enable = 1
+
+###################################################################################################
+# FACTION EMOJIS                                                                                  #
+###################################################################################################
+#    Discord.Emojis.Faction.Alliance
+#        Description: Emoji name (or ID) representing the Alliance.
+#        Allowed:     An emoji name with or without surrounding colons, or a raw emoji ID.
+#        Default:     ":factionalliance:"
+
+Discord.Emojis.Faction.Alliance = ":factionalliance:"
+
+#    Discord.Emojis.Faction.Horde
+#        Description: Emoji name (or ID) representing the Horde.
+#        Allowed:     An emoji name with or without surrounding colons, or a raw emoji ID.
+#        Default:     ":factionhorde:"
+
+Discord.Emojis.Faction.Horde = ":factionhorde:"
+
+###################################################################################################
+# CLASS EMOJIS                                                                                    #
+###################################################################################################
+#    The class emoji section. Each entry names a playable class. Names may be entered with or
+#    without surrounding colons (":classdk:" == "classdk"). You can add extra/custom entries
+#    for future class IDs (e.g. Demon Hunter) without changing the resolver logic.
+#
+#    Discord.Emojis.Class.Warrior
+#    Discord.Emojis.Class.Paladin
+#    Discord.Emojis.Class.Hunter
+#    Discord.Emojis.Class.Rogue
+#    Discord.Emojis.Class.Priest
+#    Discord.Emojis.Class.DeathKnight
+#    Discord.Emojis.Class.Shaman
+#    Discord.Emojis.Class.Mage
+#    Discord.Emojis.Class.Warlock
+#    Discord.Emojis.Class.Druid
+#    Discord.Emojis.Class.DemonHunter  (optional extra)
+
+Discord.Emojis.Class.Warrior = ":classwarrior:"
+Discord.Emojis.Class.Paladin = ":classpaladin:"
+Discord.Emojis.Class.Hunter = ":classhunter:"
+Discord.Emojis.Class.Rogue = ":classrogue:"
+Discord.Emojis.Class.Priest = ":classpriest:"
+Discord.Emojis.Class.DeathKnight = ":classdk:"
+Discord.Emojis.Class.Shaman = ":classshaman:"
+Discord.Emojis.Class.Mage = ":classmage:"
+Discord.Emojis.Class.Warlock = ":classwarlock:"
+Discord.Emojis.Class.Druid = ":classdruid:"
+Discord.Emojis.Class.DemonHunter = ":classdh:"
+
+###################################################################################################
+# RACE EMOJIS                                                                                     #
+###################################################################################################
+#    Race emojis have Male (ma) and Female (fe) variants. Gender and race are read from the
+#    character to select the correct emoji. Names may be entered with or without colons.
+#    Example: :racehumanma:  = human male;  :racehumanfe:  = human female.
+
+Discord.Emojis.Race.Human.Male = ":racehumanma:"
+Discord.Emojis.Race.Human.Female = ":racehumanfe:"
+Discord.Emojis.Race.Orc.Male = ":raceorcma:"
+Discord.Emojis.Race.Orc.Female = ":raceorcfe:"
+Discord.Emojis.Race.Dwarf.Male = ":racedwarfma:"
+Discord.Emojis.Race.Dwarf.Female = ":racedwarffe:"
+Discord.Emojis.Race.NightElf.Male = ":racenightelfma:"
+Discord.Emojis.Race.NightElf.Female = ":racenightelffe:"
+Discord.Emojis.Race.Undead.Male = ":raceundeadma:"
+Discord.Emojis.Race.Undead.Female = ":raceundeadfe:"
+Discord.Emojis.Race.Tauren.Male = ":racetaurenma:"
+Discord.Emojis.Race.Tauren.Female = ":racetaurenfe:"
+Discord.Emojis.Race.Gnome.Male = ":racegnomema:"
+Discord.Emojis.Race.Gnome.Female = ":racegnomefe:"
+Discord.Emojis.Race.Troll.Male = ":racetrollma:"
+Discord.Emojis.Race.Troll.Female = ":racetrollfe:"
+Discord.Emojis.Race.BloodElf.Male = ":racebloodelfma:"
+Discord.Emojis.Race.BloodElf.Female = ":racebloodelffe:"
+Discord.Emojis.Race.Draenei.Male = ":racedraeneima:"
+Discord.Emojis.Race.Draenei.Female = ":racedraeneife:"
+
+###################################################################################################
+# DISCORD ROLES                                                                                    #
+###################################################################################################
+#    When a Discord message is relayed into the in-game Global Chat, the sender is shown with
+#    their Discord display name colored by their Discord role. The module fetches the live guild
+#    role colors from Discord; you can also override specific roles or force an "admin" color.
+
+#    Discord.Roles.Enable
+#        Description: Master switch for role-based name coloring.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Roles.Enable = 1
+
+#    Discord.Roles.UseLiveColors
+#        Description: Use the actual Discord role colors (fetched from the guild). When 0, only
+#                     colors explicitly configured in Discord.Roles.Colors are applied.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Roles.UseLiveColors = 1
+
+#    Discord.Roles.AdminIds
+#        Description: Comma separated Discord role IDs that are treated as admins. Members holding
+#                     one of these roles appear in-game with the Blizz icon and the admin color.
+#        Allowed:     Comma separated numeric snowflakes.
+#        Default:     ""
+
+Discord.Roles.AdminIds = ""
+
+#    Discord.Roles.AdminColor
+#        Description: The color (RRGGBB) used for admin roles. WoW-style red by default.
+#        Allowed:     A hex color, e.g. cc1c1f.
+#        Default:     "cc1c1f"
+
+Discord.Roles.AdminColor = "cc1c1f"
+
+#    Discord.Roles.Colors
+#        Description: Optional role color overrides in the form roleid:rrggbb, comma separated.
+#                     These take priority over the live Discord role color.
+#                     Example:  "111111111111111111:5865f2,222222222222222222:00ff00"
+#        Allowed:     "roleId:hexcolor,roleId:hexcolor,..."
+#        Default:     ""
+
+Discord.Roles.Colors = ""
+
+#    Discord.Roles.Tags
+#        Description: Roles whose names are shown before the sender's display name in-game,
+#                     in this exact order. Use "roleid" to show the role's real name, or
+#                     "roleid:Label" to show a custom label. Example: a member with the Paladin,
+#                     Orc and Horde roles would appear as  [Paladin] [Orc] [Horde] Name.
+#                     Useful to display a player's faction, race and class roles.
+#        Allowed:     "roleid,roleid:Label,roleid:Label,..."
+#        Default:     ""
+
+Discord.Roles.Tags = ""
+
+###################################################################################################
+# ADMIN CONSOLE                                                                                   #
+###################################################################################################
+#    Discord.Admin.Enable
+#        Description: Master switch for Discord administrative commands.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Admin.Enable = 1
+
+#    Discord.Admin.ChannelId
+#        Description: The channel where admin commands are accepted and confirmations appear.
+#        Allowed:     A numeric snowflake, or 0 to allow admin commands in any channel.
+#        Default:     0
+
+Discord.Admin.ChannelId = 0
+
+#    Discord.Admin.ConfirmTimeout
+#        Description: Seconds a confirmation button row stays valid before expiring.
+#        Allowed:     Seconds >= 10
+#        Default:     60
+
+Discord.Admin.ConfirmTimeout = 60
+
+#    Discord.Admin.AllowRawConsole
+#        Description: Whether the /console raw-command slash command is enabled. Raw console can
+#                     run arbitrary worldserver commands; keep disabled unless you fully trust
+#                     every admin you authorize.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     0
+#        Security:    Enabling this lets authorized Discord users issue raw worldserver console
+#                     commands. Only enable with tightly restricted permissions.
+
+Discord.Admin.AllowRawConsole = 0
+
+###################################################################################################
+# ADMIN PERMISSIONS                                                                               #
+###################################################################################################
+#    Authorization for Discord admin commands is separate from AzerothCore GM ranks. A linked
+#    GM account does NOT automatically authorize Discord commands. Only the roles and user IDs
+#    below authorize Discord administration.
+#
+#    Discord.Admin.AllowedRoleIds
+#        Description: Comma separated Discord role IDs allowed to use admin commands.
+#        Allowed:     Comma separated numeric snowflakes, or empty.
+#        Default:     ""
+
+Discord.Admin.AllowedRoleIds = ""
+
+#    Discord.Admin.AllowedUserIds
+#        Description: Comma separated Discord user IDs allowed to use admin commands.
+#        Allowed:     Comma separated numeric snowflakes, or empty.
+#        Default:     ""
+
+Discord.Admin.AllowedUserIds = ""
+
+#    Discord.Admin.Commands.Server
+#    Discord.Admin.Commands.Player
+#    Discord.Admin.Commands.Account
+#    Discord.Admin.Commands.Announce
+#    Discord.Admin.Commands.Config
+#    Discord.Admin.Commands.Console
+#        Description: Per-command-category toggles. Each category can be individually enabled.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Admin.Commands.Server = 1
+Discord.Admin.Commands.Player = 1
+Discord.Admin.Commands.Account = 1
+Discord.Admin.Commands.Announce = 1
+Discord.Admin.Commands.Config = 1
+Discord.Admin.Commands.Console = 0
+
+#    Discord.Admin.SelfConfirmOnly
+#        Description: When 1, only the Discord user who issued a dangerous command may press the
+#                     Confirm button. When 0, any authorized admin may confirm.
+#        Allowed:     0 = anyone authorized, 1 = requester only
+#        Default:     1
+#        Security:    Keep at 1 for tightest control.
+
+Discord.Admin.SelfConfirmOnly = 1
+
+###################################################################################################
+# CONFIRMATIONS                                                                                   #
+###################################################################################################
+#    Confirmation dialog behavior for destructive commands (restart, shutdown, ban, level/money
+#    changes, item grants, raw console). These are sent to the admin channel with Confirm/Cancel
+#    buttons.
+
+#    Discord.Confirm.RequireConfirm
+#        Description: Master toggle for the confirmation buttons.
+#        Allowed:     0 = execute immediately, 1 = require confirm
+#        Default:     1
+
+Discord.Confirm.RequireConfirm = 1
+
+###################################################################################################
+# EVENT LOGGING                                                                                   #
+###################################################################################################
+#    Discord.Events.Enable
+#        Description: Master switch for the events/logging channel.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Events.Enable = 1
+
+#    Discord.Events.ChannelId
+#        Description: The channel where event messages are posted.
+#        Allowed:     A numeric snowflake, or 0.
+#        Default:     0
+
+Discord.Events.ChannelId = 0
+
+#    Individual event categories. Each can be independently enabled.
+
+#    Discord.Events.PlayerLogin
+Discord.Events.PlayerLogin = 1
+
+#    Discord.Events.PlayerLogout
+Discord.Events.PlayerLogout = 1
+
+#    Discord.Events.MemberJoin
+Discord.Events.MemberJoin = 1
+
+#    Discord.Events.MemberLeave
+Discord.Events.MemberLeave = 1
+
+#    Discord.Events.Achievement
+Discord.Events.Achievement = 1
+
+#    Discord.Events.BossKill
+Discord.Events.BossKill = 1
+
+#    Discord.Events.Ban
+Discord.Events.Ban = 1
+
+#    Discord.Events.Mute
+Discord.Events.Mute = 1
+
+#    Discord.Events.GmCommand
+Discord.Events.GmCommand = 1
+
+#    Discord.Events.ServerStartup
+Discord.Events.ServerStartup = 1
+
+#    Discord.Events.ServerShutdown
+Discord.Events.ServerShutdown = 1
+
+#    Discord.Events.ServerRestart
+Discord.Events.ServerRestart = 1
+
+#    Discord.Events.ServerError
+Discord.Events.ServerError = 1
+
+###################################################################################################
+# ACHIEVEMENTS                                                                                    #
+###################################################################################################
+#    Discord.Events.Achievement.MinValue
+#        Description: Only post achievements with an achievement points value >= this.
+#        Allowed:     Any non-negative integer.
+#        Default:     0
+
+Discord.Events.Achievement.MinValue = 0
+
+###################################################################################################
+# BOSS KILLS                                                                                      #
+###################################################################################################
+#    Discord.Events.BossKill.Dungeon
+#        Description: Post dungeon boss kills.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Events.BossKill.Dungeon = 1
+
+#    Discord.Events.BossKill.Raid
+#        Description: Post raid boss kills.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Events.BossKill.Raid = 1
+
+#    Discord.Events.BossKill.World
+#        Description: Post world boss kills (bosses in outdoor zones).
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Events.BossKill.World = 1
+
+#    Discord.Events.BossKill.FinalBossOnly
+#        Description: When 1, only post the final boss of each encounter instead of every boss.
+#        Allowed:     0 = every boss, 1 = final boss only
+#        Default:     0
+
+Discord.Events.BossKill.FinalBossOnly = 0
+
+###################################################################################################
+# PLAYERBOTS                                                                                      #
+###################################################################################################
+#    Discord.Playerbots.ShowPopulation
+#        Description: Show separate real/playerbot/total population numbers in status and
+#                     population commands.
+#        Allowed:     0 = hide bots, 1 = show bots
+#        Default:     1
+
+Discord.Playerbots.ShowPopulation = 1
+
+#    Discord.Playerbots.IncludeInChat
+#        Description: Relay Playerbot chat into Discord. Bot chat is suppressed by default.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     0
+
+Discord.Playerbots.IncludeInChat = 0
+
+#    Discord.Playerbots.IncludeInEvents
+#        Description: Log Playerbot login/logout events. Suppressed by default.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     0
+
+Discord.Playerbots.IncludeInEvents = 0
+
+###################################################################################################
+# SERVER STATUS                                                                                   #
+###################################################################################################
+#    Discord.ServerStatus.Enable
+#        Description: Maintains one persistent status message in a channel, edited periodically
+#                     rather than posting new messages each time.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     0
+
+Discord.ServerStatus.Enable = 1
+
+#    Discord.ServerStatus.ChannelId
+#        Description: The channel that holds the persistent status message.
+#        Allowed:     A numeric snowflake, or 0.
+#        Default:     0
+
+Discord.ServerStatus.ChannelId = 0
+
+#    Discord.ServerStatus.UpdateInterval
+#        Description: Seconds between status edits.
+#        Allowed:     Seconds >= 10
+#        Default:     60
+
+Discord.ServerStatus.UpdateInterval = 60
+
+#    Discord.ServerStatus.MessageId
+#        Description: The ID of the previously-created persistent status message, so the same
+#                     message is edited again after a restart. Leave 0 to create a new one.
+#        Allowed:     A numeric snowflake, or 0.
+#        Default:     0
+
+Discord.ServerStatus.MessageId = 0
+
+###################################################################################################
+# DISCORD PRESENCE                                                                                #
+###################################################################################################
+#    Discord.Presence.Enable
+#        Description: Set a periodic activity/presence for the bot.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Presence.Enable = 1
+
+#    Discord.Presence.UpdateInterval
+#        Description: Seconds between presence updates.
+#        Allowed:     Seconds >= 10
+#        Default:     60
+
+Discord.Presence.UpdateInterval = 60
+
+#    Discord.Presence.ActivityType
+#        Description: Activity type to display.
+#        Allowed:     Playing | Watching | Listening
+#        Default:     "Playing"
+
+Discord.Presence.ActivityType = "Playing"
+
+#    Discord.Presence.Text
+#        Description: Activity text. Supported variables:
+#                     {realm} {players} {playerbots} {total} {uptime} {expansion}
+#        Allowed:     Free text with variables.
+#        Default:     "Playing {realm} | {players} players"
+
+Discord.Presence.Text = "Playing {realm} | {players} players"
+
+###################################################################################################
+# CHAT FILTER                                                                                     #
+###################################################################################################
+#    Simple hate-speech filter for the Global Chat bridge. Blocks or censors messages containing
+#    banned words (slurs) while allowing mild profanity. Matching is case-insensitive and applies
+#    a light leetspeak normalization (e.g. "h1tler" -> "hitler"); whole words are matched so a
+#    banned word never triggers inside an innocent longer word.
+
+#    Discord.Filter.Enable
+#        Description: Master switch for the chat filter.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     0
+
+Discord.Filter.Enable = 1
+
+#    Discord.Filter.DiscordToGame
+#        Description: Apply the filter to Discord messages being relayed into the game.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Filter.DiscordToGame = 1
+
+#    Discord.Filter.GameToDiscord
+#        Description: Apply the filter to in-game global chat being relayed to Discord.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     1
+
+Discord.Filter.GameToDiscord = 1
+
+#    Discord.Filter.Mode
+#        Description: How to handle a banned word.
+#                     "block"  = drop the entire message
+#                     "censor" = replace each banned word with ***
+#        Allowed:     block | censor
+#        Default:     "block"
+
+Discord.Filter.Mode = "censor"
+
+#    Discord.Filter.Words
+#        Description: Comma separated list of banned words. When empty, a small built-in starter
+#                     list of severe slurs is used. Review and extend this list to fit your
+#                     community; the filter only blocks exactly these words.
+#        Allowed:     "word1,word2,word3,..."
+#        Default:     "" (uses the built-in starter list)
+
+Discord.Filter.Words = ""
+
+###################################################################################################
+# DEBUGGING                                                                                       #
+###################################################################################################
+#    Discord.Debug.LogHttp
+#        Description: Log all HTTP REST traffic (URLs, status codes). Does not log body content
+#                     or the bot token.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     0
+
+Discord.Debug.LogHttp = 0
+
+#    Discord.Debug.LogGateway
+#        Description: Log gateway connection lifecycle and reconnects.
+#        Allowed:     0 = disabled, 1 = enabled
+#        Default:     0
+
+Discord.Debug.LogGateway = 0
+
+###################################################################################################
