@@ -41,7 +41,7 @@ never blocked by Discord traffic.
 
 ```bash
 cd "$ACORE_SOURCE/modules"
-git clone <your-repo-url> mod-discord-chat
+git clone https://github.com/kiwilabagency/mod-discord-chat mod-discord-chat
 ```
 
 ### 2. Configure and build
